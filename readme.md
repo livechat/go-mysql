@@ -1,1 +1,1 @@
-[Go doc](https://godoc.org/livechat/go-mysql)
+[Go doc](https://godoc.org/github.com/livechat/go-mysql)
