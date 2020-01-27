@@ -7,8 +7,6 @@ import (
 	"sync/atomic"
 
 	"time"
-
-	"github.com/livechat/go-packages/logger"
 )
 
 type Transaction struct {

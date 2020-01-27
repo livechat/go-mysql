@@ -17,7 +17,6 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/livechat/go-packages/logger"
 )
 
 type Client struct {
