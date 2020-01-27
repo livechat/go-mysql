@@ -2,6 +2,8 @@ package mysql
 
 import "time"
 
+// MultiResults is returned from all multiple statement calls.
+//
 type MultiResults struct {
 	Results   []*Results
 	QueryTime time.Duration

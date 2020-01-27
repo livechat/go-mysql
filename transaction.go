@@ -29,8 +29,8 @@ func (t *Transaction) Call(ctx context.Context, procedure string, args ...interf
 	return t.Query(ctx, query, args...)
 }
 
-// Done returns a chanel. The channel blocks until the transaction is over.
-// When transaction is over, channel returns nil for success or error when transaction failed.
+// Done returns a chanel. The chanel blocks until the transaction is over.
+// When transaction is over, chanel returns nil for success or error when transaction failed.
 //
 func (t *Transaction) Done() chan error {
 	t.mu.Lock()

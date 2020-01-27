@@ -5,6 +5,8 @@ type Row struct {
 	Columns  *Columns
 }
 
+// Row represents one row of results.
+//
 func (r *Row) pointers() []interface{} {
 	pointers := make([]interface{}, len(r.Elements))
 

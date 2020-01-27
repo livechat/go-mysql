@@ -10,13 +10,15 @@ func init() {
 	logger = &defaultLogger{}
 }
 
+// Logger interface for enabling logs.
+//
 type Logger interface {
-	FromCtx(context.Context) Logger
-	Tag(string) Logger
+	FromCtx(context.Context) Logger // get logger from context if found or return new logger, useful for context logs
+	Tag(string) Logger              // this package tags all logs with mysql tag
 
-	Error(...interface{})
-	Warning(...interface{})
-	Debug(...interface{})
+	Error(...interface{})   // used for mysql and connection errors
+	Warning(...interface{}) // used for deadlocks
+	Debug(...interface{})   // used queries
 }
 
 type defaultLogger struct{}
@@ -32,6 +34,9 @@ func (d *defaultLogger) Error(p ...interface{})   {}
 func (d *defaultLogger) Warning(p ...interface{}) {}
 func (d *defaultLogger) Debug(p ...interface{})   {}
 
+// The default logger does not log anything, this function overrides default logger.
+// The logger must compatible with a Logger interface.
+//
 func SetLogger(l Logger) {
 	logger = l
 }

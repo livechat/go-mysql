@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+// Meta is returned from all Exec calls.
+//
 type Meta struct {
 	LastIntertID int64
 	RowsAffected int64
