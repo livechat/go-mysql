@@ -344,6 +344,16 @@ func (c *Client) MultiQuery(ctx context.Context, query string, args ...interface
 	return multiResults, nil
 }
 
+// QueryTx executes a query in a transantion context if transaction exists.
+//
+func (c *Client) QueryTx(ctx context.Context, query string, args ...interface{}) (*Results, error) {
+	if tx, ok := ctx.Value("tx").(*Transaction); ok {
+		return tx.Query(ctx, query, args...)
+	} else {
+		return c.Query(ctx, query, args...)
+	}
+}
+
 func (c *Client) Stats() *Stats {
 	c.mu.Lock()
 	defer c.mu.Unlock()
