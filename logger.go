@@ -1,6 +1,10 @@
 package mysql
 
-import "context"
+import (
+	"context"
+
+	m "github.com/go-sql-driver/mysql"
+)
 
 var (
 	logger Logger
@@ -34,9 +38,17 @@ func (d *defaultLogger) Error(p ...interface{})   {}
 func (d *defaultLogger) Warning(p ...interface{}) {}
 func (d *defaultLogger) Debug(p ...interface{})   {}
 
+type loggerWrapper struct {
+	l Logger
+}
+
+func (lw *loggerWrapper) Print(v ...interface{}) {
+	lw.l.Error(v...)
+}
+
 // The default logger does not log anything, this function overrides default logger.
 // The logger must compatible with a Logger interface.
-//
 func SetLogger(l Logger) {
 	logger = l
+	m.SetLogger(&loggerWrapper{l})
 }
