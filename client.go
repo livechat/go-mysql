@@ -17,6 +17,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/livechat/go-packages/logger"
 )
 
 type Client struct {
@@ -200,7 +201,7 @@ func (c *Client) Exec(ctx context.Context, query string, args ...interface{}) (*
 
 func (c *Client) Query(ctx context.Context, query string, args ...interface{}) (*Results, error) {
 	if c.replica != nil {
-		c.replica.Query(ctx, query, args...)
+		return c.replica.Query(ctx, query, args...)
 	}
 
 	var (
