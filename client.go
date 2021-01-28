@@ -20,9 +20,10 @@ import (
 )
 
 type Client struct {
-	db     *sql.DB
-	config *Config
-	s      *stats
+	db      *sql.DB
+	replica *Client
+	config  *Config
+	s       *stats
 
 	mu sync.Mutex
 	r  *relay
@@ -44,10 +45,14 @@ func NewClient(dsn string) (*Client, error) {
 	cfg := NewDefaultConfig()
 	s := newStats()
 
-	c := &Client{db, cfg, s, sync.Mutex{}, &relay{}}
+	c := &Client{db, nil, cfg, s, sync.Mutex{}, &relay{}}
 	c.SetConfig(cfg)
 
 	return c, nil
+}
+
+func (c *Client) SetReplica(replica *Client) {
+	c.replica = replica
 }
 
 // SetConfig applies config passed in cfg.
@@ -64,6 +69,10 @@ func (c *Client) SetConfig(cfg *Config) {
 // Options can be null.
 //
 func (c *Client) Begin(ctx context.Context, opts *sql.TxOptions) (*Transaction, error) {
+	if opts != nil && opts.ReadOnly && c.replica != nil {
+		return c.replica.Begin(ctx, opts)
+	}
+
 	var err error
 
 	if tx, ok := ctx.Value("tx").(*Transaction); ok {
@@ -190,6 +199,9 @@ func (c *Client) Exec(ctx context.Context, query string, args ...interface{}) (*
 }
 
 func (c *Client) Query(ctx context.Context, query string, args ...interface{}) (*Results, error) {
+	if c.replica != nil {
+		c.replica.Query(ctx, query, args...)
+	}
 
 	var (
 		i      int = 1
