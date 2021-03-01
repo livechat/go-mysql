@@ -63,6 +63,11 @@ func (t *Transaction) Query(ctx context.Context, query string, args ...interface
 		defer cancel()
 	}
 
+	if checkIfSyncNeeded(ctx) {
+		t.tx.ExecContext(ctx, "SET SESSION wsrep_sync_wait=1")
+		defer t.tx.ExecContext(ctx, "SET SESSION wsrep_sync_wait=0")
+	}
+
 	rows, err = t.tx.QueryContext(ctx, query, args...)
 	queryTime := time.Now().Sub(start)
 	t.s.sample(&QueryStats{query, queryTime, 0, 0})
@@ -149,6 +154,7 @@ func (t *Transaction) Exec(ctx context.Context, query string, args ...interface{
 		} else {
 			atomic.AddInt64(t.s.totalFailedQueries, 1)
 			logger.FromCtx(ctx).Tag("mysql").Error(*err, query)
+			markSyncNeeded(ctx)
 		}
 
 	}(&err)

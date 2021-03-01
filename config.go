@@ -28,6 +28,9 @@ type Config struct {
 
 	// If d <= 0, connections are reused forever.
 	ConnMaxLifetime time.Duration
+
+	// Check if support for synchronous reads after transaction should be used
+	SyncAfterTransaction bool
 }
 
 func NewDefaultConfig() *Config {
@@ -41,5 +44,7 @@ func NewDefaultConfig() *Config {
 		MaxOpenConns:    20,
 		MaxIdleConns:    20,
 		ConnMaxLifetime: time.Second * 60,
+
+		SyncAfterTransaction: false,
 	}
 }
