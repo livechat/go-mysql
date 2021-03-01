@@ -30,5 +30,8 @@ func checkIfSyncNeeded(ctx context.Context) bool {
 }
 
 func WithSync(ctx context.Context) context.Context {
+	if sync := getSyncFromCtx(ctx); sync != nil {
+		return ctx
+	}
 	return context.WithValue(ctx, transactSyncKey{}, &transactSync{Sync: false})
 }

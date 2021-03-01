@@ -239,8 +239,8 @@ func (c *Client) Query(ctx context.Context, query string, args ...interface{}) (
 	start := time.Now()
 
 	if checkIfSyncNeeded(ctx) {
-		t.tx.ExecContext(ctx, "SET SESSION wsrep_sync_wait=1")
-		defer t.tx.ExecContext(ctx, "SET SESSION wsrep_sync_wait=0")
+		c.db.ExecContext(ctx, "SET SESSION wsrep_sync_wait=1")
+		defer c.db.ExecContext(ctx, "SET SESSION wsrep_sync_wait=0")
 	}
 
 	for ; i > 0; i-- {
