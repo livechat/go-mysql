@@ -10,8 +10,9 @@ import (
 )
 
 type Transaction struct {
-	tx *sql.Tx
-	s  *stats
+	tx      *sql.Tx
+	s       *stats
+	replica *Client
 
 	config    *Config
 	r         *relay
@@ -20,8 +21,8 @@ type Transaction struct {
 	startedAt time.Time
 }
 
-func newTransaction(tx *sql.Tx, s *stats, config *Config, r *relay) *Transaction {
-	return &Transaction{tx, s, config, r, make([]chan error, 0), sync.RWMutex{}, time.Now()}
+func newTransaction(tx *sql.Tx, s *stats, replica *Client, config *Config, r *relay) *Transaction {
+	return &Transaction{tx, s, replica, config, r, make([]chan error, 0), sync.RWMutex{}, time.Now()}
 }
 
 func (t *Transaction) Call(ctx context.Context, procedure string, args ...interface{}) (*Results, error) {
@@ -61,11 +62,6 @@ func (t *Transaction) Query(ctx context.Context, query string, args ...interface
 	if t.config.Timeout > 0 {
 		ctx, cancel = context.WithTimeout(ctx, t.config.Timeout)
 		defer cancel()
-	}
-
-	if checkIfSyncNeeded(ctx) {
-		t.tx.ExecContext(ctx, "SET SESSION wsrep_sync_wait=1")
-		defer t.tx.ExecContext(ctx, "SET SESSION wsrep_sync_wait=0")
 	}
 
 	rows, err = t.tx.QueryContext(ctx, query, args...)
@@ -154,7 +150,6 @@ func (t *Transaction) Exec(ctx context.Context, query string, args ...interface{
 		} else {
 			atomic.AddInt64(t.s.totalFailedQueries, 1)
 			logger.FromCtx(ctx).Tag("mysql").Error(*err, query)
-			markSyncNeeded(ctx)
 		}
 
 	}(&err)
@@ -194,6 +189,9 @@ func (t *Transaction) Commit(ctx context.Context) error {
 	defer func(err *error) {
 		if *err == nil {
 			atomic.AddInt64(t.s.totalSuccessQueries, 1)
+			if t.config.SyncAfterTransaction && t.replica != nil {
+				t.replica.db.ExecContext(ctx, "SET SESSION wsrep_sync_wait=1 SELECT 1; SET SESSION wsrep_sync_wait=0")
+			}
 		} else {
 			atomic.AddInt64(t.s.totalFailedQueries, 1)
 			logger.FromCtx(ctx).Tag("mysql").Error(*err, "COMMIT")

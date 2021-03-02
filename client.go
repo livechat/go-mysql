@@ -102,7 +102,7 @@ func (c *Client) Begin(ctx context.Context, opts *sql.TxOptions) (*Transaction, 
 		return nil, err
 	}
 
-	return newTransaction(tx, c.s, c.config, c.r), nil
+	return newTransaction(tx, c.s, c.replica, c.config, c.r), nil
 }
 
 /*
@@ -149,6 +149,9 @@ func (c *Client) Exec(ctx context.Context, query string, args ...interface{}) (*
 
 		if *err == nil {
 			atomic.AddInt64(c.s.totalSuccessQueries, 1)
+			if c.config.SyncAfterTransaction && c.replica != nil {
+				c.replica.db.ExecContext(ctx, "SET SESSION wsrep_sync_wait=1 SELECT 1; SET SESSION wsrep_sync_wait=0")
+			}
 		} else {
 			atomic.AddInt64(c.s.totalFailedQueries, 1)
 			logger.FromCtx(ctx).Tag("mysql").Error(*err, query)
@@ -237,11 +240,6 @@ func (c *Client) Query(ctx context.Context, query string, args ...interface{}) (
 	defer c.r.end()
 
 	start := time.Now()
-
-	if checkIfSyncNeeded(ctx) {
-		c.db.ExecContext(ctx, "SET SESSION wsrep_sync_wait=1")
-		defer c.db.ExecContext(ctx, "SET SESSION wsrep_sync_wait=0")
-	}
 
 	for ; i > 0; i-- {
 		rows, err = c.db.QueryContext(ctx, query, args...)
