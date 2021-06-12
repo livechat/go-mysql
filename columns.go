@@ -69,7 +69,7 @@ func (c *Columns) newRow() (*Row, error) {
 			row.Elements[i].Type = elementString
 			row.Elements[i].NullString = &sql.NullString{}
 
-		case "mysql.NullTime":
+		case "mysql.NullTime", "sql.NullTime":
 			row.Elements[i].Type = elementTime
 			row.Elements[i].NullTime = &mysql.NullTime{}
 
@@ -79,7 +79,7 @@ func (c *Columns) newRow() (*Row, error) {
 			row.Elements[i].NullFloat64 = &sql.NullFloat64{}
 
 		default:
-			return nil, errors.New("unhandled type" + colType.String())
+			return nil, errors.New("unhandled type " + colType.String())
 		}
 	}
 
