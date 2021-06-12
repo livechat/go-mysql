@@ -366,6 +366,16 @@ func (c *Client) QueryTx(ctx context.Context, query string, args ...interface{})
 	}
 }
 
+// ExecTx executes an exec in a transantion context if transaction exists.
+//
+func (c *Client) ExecTx(ctx context.Context, query string, args ...interface{}) (*Meta, error) {
+	if tx, ok := ctx.Value("tx").(*Transaction); ok {
+		return tx.Exec(ctx, query, args...)
+	} else {
+		return c.Exec(ctx, query, args...)
+	}
+}
+
 func (c *Client) Stats() *Stats {
 	c.mu.Lock()
 	defer c.mu.Unlock()
