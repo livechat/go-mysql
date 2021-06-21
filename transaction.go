@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 
 	"time"
+
+	"github.com/opentracing/opentracing-go"
 )
 
 type Transaction struct {
@@ -18,10 +20,12 @@ type Transaction struct {
 	done      []chan error
 	mu        sync.RWMutex
 	startedAt time.Time
+	t         opentracing.Tracer
+	span      opentracing.Span
 }
 
-func newTransaction(tx *sql.Tx, s *stats, config *Config, r *relay) *Transaction {
-	return &Transaction{tx, s, config, r, make([]chan error, 0), sync.RWMutex{}, time.Now()}
+func newTransaction(tx *sql.Tx, s *stats, config *Config, r *relay, t opentracing.Tracer, span opentracing.Span) *Transaction {
+	return &Transaction{tx, s, config, r, make([]chan error, 0), sync.RWMutex{}, time.Now(), t, span}
 }
 
 func (t *Transaction) Call(ctx context.Context, procedure string, args ...interface{}) (*Results, error) {
@@ -47,14 +51,19 @@ func (t *Transaction) Query(ctx context.Context, query string, args ...interface
 		cancel func()
 	)
 
+	span := t.t.StartSpan("QUERY", opentracing.ChildOf(t.span.Context()))
+	span.SetTag("db.type", "mysql")
+	span.SetTag("db.statement", query)
+
 	defer func(err *error) {
 		if *err == nil {
 			atomic.AddInt64(t.s.totalSuccessQueries, 1)
 		} else {
 			atomic.AddInt64(t.s.totalFailedQueries, 1)
 			logger.FromCtx(ctx).Tag("mysql").Error(*err, query)
+			span.SetTag("error", true)
 		}
-
+		span.Finish()
 	}(&err)
 
 	start := time.Now()
@@ -142,6 +151,9 @@ func (t *Transaction) Exec(ctx context.Context, query string, args ...interface{
 		result sql.Result
 		cancel func()
 	)
+	span := t.t.StartSpan("EXEC", opentracing.ChildOf(t.span.Context()))
+	span.SetTag("db.type", "mysql")
+	span.SetTag("db.statement", query)
 
 	defer func(err *error) {
 		if *err == nil {
@@ -149,8 +161,9 @@ func (t *Transaction) Exec(ctx context.Context, query string, args ...interface{
 		} else {
 			atomic.AddInt64(t.s.totalFailedQueries, 1)
 			logger.FromCtx(ctx).Tag("mysql").Error(*err, query)
+			span.SetTag("error", true)
 		}
-
+		span.Finish()
 	}(&err)
 
 	start := time.Now()
@@ -179,6 +192,9 @@ func (t *Transaction) Commit(ctx context.Context) error {
 	if _, ok := ctx.Value("tx").(*Transaction); ok {
 		return nil
 	}
+	span := t.t.StartSpan("COMMIT", opentracing.ChildOf(t.span.Context()))
+	span.SetTag("db.type", "mysql")
+	span.SetTag("db.statement", "COMMIT")
 
 	defer atomic.AddInt64(t.s.inProgressQueries, -1)
 	defer t.r.end()
@@ -191,8 +207,10 @@ func (t *Transaction) Commit(ctx context.Context) error {
 		} else {
 			atomic.AddInt64(t.s.totalFailedQueries, 1)
 			logger.FromCtx(ctx).Tag("mysql").Error(*err, "COMMIT")
+			span.SetTag("error", true)
 		}
-
+		span.Finish()
+		t.span.Finish()
 	}(&err)
 
 	start := time.Now()
@@ -209,6 +227,9 @@ func (t *Transaction) Rollback(ctx context.Context) error {
 	if _, ok := ctx.Value("tx").(*Transaction); ok {
 		return nil
 	}
+	span := t.t.StartSpan("ROLLBACK", opentracing.ChildOf(t.span.Context()))
+	span.SetTag("db.type", "mysql")
+	span.SetTag("db.statement", "ROLLBACK")
 
 	defer atomic.AddInt64(t.s.inProgressQueries, -1)
 	defer t.r.end()
@@ -221,7 +242,10 @@ func (t *Transaction) Rollback(ctx context.Context) error {
 		} else {
 			atomic.AddInt64(t.s.totalFailedQueries, 1)
 			logger.FromCtx(ctx).Tag("mysql").Error(*err, "ROLLBACK")
+			span.SetTag("error", true)
 		}
+		span.Finish()
+		t.span.Finish()
 	}(&err)
 
 	start := time.Now()

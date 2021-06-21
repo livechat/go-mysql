@@ -17,6 +17,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 type Client struct {
@@ -27,6 +28,7 @@ type Client struct {
 
 	mu sync.Mutex
 	r  *relay
+	t  opentracing.Tracer
 }
 
 // NewClient creates a new client for a given DSN.
@@ -45,7 +47,7 @@ func NewClient(dsn string) (*Client, error) {
 	cfg := NewDefaultConfig()
 	s := newStats()
 
-	c := &Client{db, nil, cfg, s, sync.Mutex{}, &relay{}}
+	c := &Client{db, nil, cfg, s, sync.Mutex{}, &relay{}, opentracing.NoopTracer{}}
 	c.SetConfig(cfg)
 
 	return c, nil
@@ -53,6 +55,11 @@ func NewClient(dsn string) (*Client, error) {
 
 func (c *Client) SetReplica(replica *Client) {
 	c.replica = replica
+}
+
+// Replace empty tracer with a cusom one
+func (c *Client) SetTracer(t opentracing.Tracer) {
+	c.t = t
 }
 
 // SetConfig applies config passed in cfg.
@@ -79,10 +86,19 @@ func (c *Client) Begin(ctx context.Context, opts *sql.TxOptions) (*Transaction, 
 		return tx, nil
 	}
 
+	transactionSpan, ctx := opentracing.StartSpanFromContextWithTracer(ctx, c.t, "TRANSACTION")
+
+	span, ctx := opentracing.StartSpanFromContextWithTracer(ctx, c.t, "BEGIN")
+	span.SetTag("db.type", "mysql")
+	span.SetTag("db.statement", "BEGIN")
+
 	defer func(e *error) {
 		if *e != nil {
 			atomic.AddInt64(c.s.inProgressQueries, -1)
+			span.SetTag("error", true)
+			transactionSpan.Finish()
 		}
+		span.Finish()
 	}(&err)
 
 	if err := c.limitReached(); err != nil {
@@ -102,7 +118,7 @@ func (c *Client) Begin(ctx context.Context, opts *sql.TxOptions) (*Transaction, 
 		return nil, err
 	}
 
-	return newTransaction(tx, c.s, c.config, c.r), nil
+	return newTransaction(tx, c.s, c.config, c.r, c.t, transactionSpan), nil
 }
 
 /*
@@ -144,6 +160,10 @@ func (c *Client) Exec(ctx context.Context, query string, args ...interface{}) (*
 		cancel func()
 	)
 
+	span, ctx := opentracing.StartSpanFromContextWithTracer(ctx, c.t, "EXEC")
+	span.SetTag("db.type", "mysql")
+	span.SetTag("db.statement", query)
+
 	defer func(err *error) {
 		atomic.AddInt64(c.s.inProgressQueries, -1)
 
@@ -152,7 +172,10 @@ func (c *Client) Exec(ctx context.Context, query string, args ...interface{}) (*
 		} else {
 			atomic.AddInt64(c.s.totalFailedQueries, 1)
 			logger.FromCtx(ctx).Tag("mysql").Error(*err, query)
+			span.SetTag("error", true)
 		}
+
+		span.Finish()
 	}(&err)
 
 	if err = c.limitReached(); err != nil {
@@ -210,6 +233,11 @@ func (c *Client) Query(ctx context.Context, query string, args ...interface{}) (
 		cancel func()
 	)
 
+	span, ctx := opentracing.StartSpanFromContextWithTracer(ctx, c.t, "QUERY")
+	span.SetTag("db.type", "mysql")
+	span.SetTag("db.statement", query)
+	defer span.Finish()
+
 	defer func(err *error) {
 		atomic.AddInt64(c.s.inProgressQueries, -1)
 		if *err == nil {
@@ -217,7 +245,9 @@ func (c *Client) Query(ctx context.Context, query string, args ...interface{}) (
 		} else {
 			atomic.AddInt64(c.s.totalFailedQueries, 1)
 			logger.FromCtx(ctx).Tag("mysql").Error(*err, query)
+			span.SetTag("error", true)
 		}
+
 	}(&err)
 
 	if err = c.limitReached(); err != nil {
